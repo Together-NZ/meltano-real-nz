@@ -1,0 +1,13 @@
+/venv
+/.meltano
+.env
+tiktok.py
+ga4.py
+dv360.py
+secret.json
+read_seret.py
+facebook_syncing_1.py
+facebook_syncing.py
+docker.py
+ttd.py
+.peter

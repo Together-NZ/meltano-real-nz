@@ -1,0 +1,145 @@
+version: 1
+default_environment: prod
+project_id: 123b8fab-a351-4b3e-a547-d5446bd5cc7g
+environments:
+- name: dev
+- name: staging
+- name: prod
+state_backend:
+  uri: gs://realnz-main-meltano-state-staging
+plugins:
+  extractors:
+  # university of waikato:
+  - name: tap-ttd
+    namespace: tap-ttd
+    pip_url: git+https://github.com/Together-NZ/tap-ttd.git
+    executable: tap-ttd
+    config:
+      api_key: ${TAP_TTD_API_KEY}
+      start_date: ${START_DATE}
+      end_date: 
+      manual: false
+      advertiser_id: 2gge6vz
+
+  - name: tap-dv360
+    namespace: tap-dv360
+    pip_url: git+https://github.com/Together-NZ/tap-dv360.git
+    executable: tap-dv360
+    capabilities:
+    - state
+    - catalog
+    - discover
+    - about
+    - stream-maps
+    config:
+      start_date: ${START_DATE}
+      advertiser_id: ${TAP_DV360_ADVERTISER_ID}
+      query_standard: dv360_standard.json
+      query_youtube: dv360_youtube.json
+      service_account: together-meltano@together-internal.iam.gserviceaccount.com   
+
+  - name: tap-tiktok
+    variant: gthesheep
+    pip_url: git+https://github.com/gthesheep/tap-tiktok.git
+    config:
+      start_date: ${START_DATE}
+
+  - name: tap-facebook
+
+    variant: airbyte
+    pip_url: git+https://github.com/MeltanoLabs/tap-airbyte-wrapper.git
+    config:
+      airbyte_config:
+        start_date: ${START_DATE}T00:00:00Z
+    select:
+    - ads_insights_*.*
+    - ad_account.*
+    - ad_sets.*
+    - ads.*
+    - campaigns.*
+  - name: tap-hivestack
+    namespace: tap-hivestack
+    pip_url: git+ssh://git@github.com/Together-NZ/tap-hivestack.git
+    executable: tap-hivestack
+    config:
+        api_key: ${TAP_HIVESTACK_API_KEY}
+        report_id: '67687'
+  - name: tap-ga4
+    variant: meltanolabs
+    pip_url: git+https://github.com/MeltanoLabs/tap-google-analytics.git
+    config:
+      reports: ./report.json
+      start_date: '2024-01-01'
+      keep_empty_rows: true
+      select:
+      - goal
+  loaders:
+  - name: target-jsonl
+    variant: andyh1203
+    pip_url: target-jsonl
+  - name: target-bigquery
+    variant: z3z1ma
+    pip_url: git+https://github.com/z3z1ma/target-bigquery.git
+    config:
+      dataset: ${BQ_DATASET}
+      project: real-nz-main
+      location: australia-southeast1
+      denormalized: false
+      schema_resolver_version: 2
+      column_name_transforms:
+        add_underscore_when_invalid: true
+        lower: true
+        snake_case: true
+      fail_fast: false
+      method: ${BQ_METHOD}
+      bucket: australia-southeast1-meltan-00c049c-bigquery-staging
+  transformers:
+  - name: dbt-bigquery
+    variant: dbt-labs
+    pip_url: dbt-core~=1.3.0 dbt-bigquery~=1.3.0
+    config:
+      method: oauth
+      project: real-nz-main
+    commands:
+      ga4_mountain_models:
+        args: run --select ga4_goal_a__mountain ga4_goal_channel__mountain
+      ga4_tourism_models:
+        args: run --select ga4_goal_a__tourism ga4_goal_channel__tourism
+      tiktok_mountain_models:
+        args: run --select +tiktok__mountain
+        description: Run the TikTok ads model
+      cm360_tourism_models:
+        args: run --select cm360_seralized__tourism cm360_direct_buy__tourism
+        description: Run the CM360 ads model
+      cm360_mountain_models:
+        args: run --select cm360_seralized__mountain cm360_direct_buy__mountain
+        description: Run the CM360 ads model
+      hivestack_realnz_models:
+        args: run --select +hivestack__realnz
+        description: Run the HiveStack model
+      hivestack_tourism_models:
+        args: run --select +hivestack__tourism
+        description: Run the HiveStack model
+      hivestack_mountain_models:
+        args: run --select +hivestack__mountain
+        description: Run the HiveStack model
+      google_ads_dv_models__realnz:
+        args: run --select +google_ads_dv__realnz
+        description: Run the Google Ads model
+      facebook_mountain_models:
+        args: run --select +facebook__mountain
+        description: Run the Facebook ads model
+      facebook_tourism_models:
+        args: run --select +facebook__tourism
+        description: Run the Facebook ads model
+      dv360_mountain_models:
+        args: run --select +dv360_standard__mountain +dv360_youtube__mountain
+        description: Run the DV360 ads model
+      dv360_tourism_models:
+        args: run --select +dv360_standard__tourism +dv360_youtube__tourism
+        description: Run the DV360 ads model
+      ttd_tourism_models:
+        args: run --select +ttd_transformed__tourism
+        description: Run the TTD ads model
+elt:
+  buffer_size: 52428800
