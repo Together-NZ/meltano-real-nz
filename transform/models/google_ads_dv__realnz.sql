@@ -1,15 +1,19 @@
 {{ config(
     materialized='table',
-) }}   
-WITH distinct_ads AS (
+) }}
+
+
+  WITH distinct_ads AS (
         SELECT DISTINCT 
             ad_group_ad_ad_id,
             ARRAY_AGG(DISTINCT IFNULL(ad_group_ad_ad_name, 'Unknown')) AS ad_name,
             ad_group_ad_ad_final_urls AS click_url
         FROM 
-            `real-nz-main.google_ads_dv_raw.ads_Ad_1476786244`
+            `together-internal.google_ads_data_transfer.ads_Ad_6544860891`
+        WHERE customer_id = 1476786244
         GROUP BY 
             ad_group_ad_ad_id, ad_group_ad_ad_final_urls
+        
 
     ),
 campaign_data AS (
@@ -20,7 +24,8 @@ campaign_data AS (
         campaign_status,
         _LATEST_DATE
     FROM 
-        `real-nz-main.google_ads_dv_raw.ads_Campaign_1476786244`
+        `together-internal.google_ads_data_transfer.ads_Campaign_6544860891`
+    WHERE customer_id = 1476786244
 ),
 distinct_campaign AS (
     SELECT 
@@ -40,16 +45,18 @@ distinct_campaign AS (
             ad_group_id,
             ARRAY_AGG(DISTINCT ad_group_name) AS ad_group_name
         FROM 
-            `real-nz-main.google_ads_dv_raw.ads_AdGroup_1476786244`
+            `together-internal.google_ads_data_transfer.ads_AdGroup_6544860891`
+        WHERE customer_id = 1476786244
         GROUP BY 
             ad_group_id
+        
     ),
-    result_raw AS (
+    result_data AS (
 
 
 SELECT  
     ad_stat.ad_group_ad_ad_id AS ad_id, 
-    ad.ad_name,  -- Join to bring in the ad name
+    ad.ad_name,
     ad_group.ad_group_name,
     ad.click_url,
     SUM(ad_stat.metrics_conversions_value) AS revenue, 
@@ -66,7 +73,7 @@ SELECT
     cam.campaign_status AS campaign_status,
     ROW_NUMBER() OVER (PARTITION BY ad_stat.ad_group_ad_ad_id,_DATA_DATE ORDER BY ad_stat.ad_group_ad_ad_id,_DATA_DATE) AS row_num  -- Use the array to avoid multiple rows
 FROM 
-    `real-nz-main.google_ads_dv_raw.ads_AdBasicStats_1476786244` AS ad_stat
+    `together-internal.google_ads_data_transfer.ads_AdBasicStats_6544860891` AS ad_stat
 LEFT JOIN 
     distinct_ads AS ad 
 ON 
@@ -79,9 +86,10 @@ LEFT JOIN
     distinct_ad_group AS ad_group
 ON 
     ad_group.ad_group_id = ad_stat.ad_group_id
-
+where ad_stat.customer_id = 1476786244
 GROUP BY 
     _DATA_DATE, ad_id, ad.ad_name, campaign_external_id, campaign_budget, cam._LATEST_DATE, cam.campaign_status, cam.campaign_name,ad.click_url,ad_group.ad_group_name
+
     )
 SELECT 
     * ,
@@ -116,4 +124,4 @@ ARRAY(
           AND SPLIT(ad_element, '_')[SAFE_OFFSET(7)] <> ''
 ) AS creative_descr,
 SPLIT(campaign_name,'_')[SAFE_OFFSET(1)] AS campaign_descr
-FROM result_raw WHERE row_num = 1
+FROM result_data WHERE row_num = 1
